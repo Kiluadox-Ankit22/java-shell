@@ -5,8 +5,8 @@ public class Main {
         // TODO: Uncomment the code below to pass the first stage;
         System.out.print("$ ");
 
-        Scanner scanner = new Scanner(System.in);
-        String command = scanner.nextLine();
+        Scanner sc = new Scanner(System.in);
+        String command = sc.nextLine();
 
         System.out.println(command + ": command not found");
     }
