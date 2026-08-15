@@ -19,7 +19,22 @@ public class Main {
                 String typeArg = command.substring(5);
                 System.out.println(type(typeArg));
             } else {
-                System.out.println(command + ": command not found");
+                String[] parts = command.trim().split("\\s+");
+                String programName = parts[0];
+
+                String executablePath = findExecutable(programName);
+
+                if (executablePath != null) {
+                    parts[0] = executablePath;
+
+                    ProcessBuilder processBuilder = new ProcessBuilder(parts);
+                    processBuilder.inheritIO();
+
+                    Process process = processBuilder.start();
+                    process.waitFor();
+                } else {
+                    System.out.println(command + ": command not found");
+                }
             }
         }
 
@@ -31,7 +46,6 @@ public class Main {
         String path = System.getenv("PATH");
         String[] pathDirs = path.split(":");
 
-        boolean isBuiltIn = false;
         for (int i = 0; i < commands.length; i++) {
             if (commands[i].equals(command)) {
                 return command + " is a shell builtin";
@@ -40,11 +54,27 @@ public class Main {
 
         for (int i = 0; i < pathDirs.length; i++) {
             File file = new File(pathDirs[i], command);
+
             if (file.exists() && file.canExecute()) {
                 return command + " is " + file.getAbsolutePath();
             }
         }
 
         return command + ": not found";
+    }
+
+    public static String findExecutable(String command) {
+        String path = System.getenv("PATH");
+        String[] pathDirs = path.split(":");
+
+        for (int i = 0; i < pathDirs.length; i++) {
+            File file = new File(pathDirs[i], command);
+
+            if (file.exists() && file.canExecute()) {
+                return file.getAbsolutePath();
+            }
+        }
+
+        return null;
     }
 }
