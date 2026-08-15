@@ -25,8 +25,6 @@ public class Main {
                 String executablePath = findExecutable(programName);
 
                 if (executablePath != null) {
-                    parts[0] = executablePath;
-
                     ProcessBuilder processBuilder = new ProcessBuilder(parts);
                     processBuilder.inheritIO();
 
