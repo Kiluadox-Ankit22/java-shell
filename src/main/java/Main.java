@@ -13,6 +13,8 @@ public class Main {
 
             if (command.equals("exit")) {
                 break;
+            } else if (command.equals("pwd")) {
+                System.out.println(System.getProperty("user.dir"));
             } else if (command.startsWith("echo")) {
                 System.out.println(command.substring(5));
             } else if (command.startsWith("type")) {
@@ -40,7 +42,7 @@ public class Main {
     }
 
     public static String type(String command) {
-        String[] commands = {"exit", "echo", "type"};
+        String[] commands = {"exit", "echo", "type", "pwd"};
         String path = System.getenv("PATH");
         String[] pathDirs = path.split(":");
 
