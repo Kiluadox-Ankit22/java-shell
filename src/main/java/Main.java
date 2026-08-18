@@ -17,10 +17,18 @@ public class Main {
             } else if (command.startsWith("cd ")) {
                 String target = command.substring(3).trim();
 
-                File directory = new File(target);
+                File directory;
 
-                if (directory.isAbsolute() && directory.isDirectory()) {
-                    currentDirectory = directory;
+                if (target.startsWith("/")) {
+                    // Absolute path
+                    directory = new File(target);
+                } else {
+                    // Relative path
+                    directory = new File(currentDirectory, target);
+                }
+
+                if (directory.isDirectory()) {
+                    currentDirectory = directory.getCanonicalFile();
                 } else {
                     System.out.println(
                         "cd: " + target + ": No such file or directory"
