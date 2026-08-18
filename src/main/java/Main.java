@@ -19,9 +19,14 @@ public class Main {
 
                 File directory;
 
-                if (target.startsWith("/")) {
+                if (target.equals("~")) {
+                    String home = System.getenv("HOME");
+                    directory = new File(home);
+
+                } else if (target.startsWith("/")) {
                     // Absolute path
                     directory = new File(target);
+
                 } else {
                     // Relative path
                     directory = new File(currentDirectory, target);
