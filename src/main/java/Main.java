@@ -114,8 +114,19 @@ public class Main {
 
         char ch = command.charAt(i);
 
+        // Backslash outside quotes
+        if (ch == '\\'
+                && !insideSingleQuotes
+                && !insideDoubleQuotes) {
+
+            // Take the next character literally
+            if (i + 1 < command.length()) {
+                i++;
+                current.append(command.charAt(i));
+            }
+
         // Single quote
-        if (ch == '\'' && !insideDoubleQuotes) {
+        } else if (ch == '\'' && !insideDoubleQuotes) {
 
             insideSingleQuotes = !insideSingleQuotes;
 
@@ -124,7 +135,7 @@ public class Main {
 
             insideDoubleQuotes = !insideDoubleQuotes;
 
-        // Space outside both types of quotes
+        // Whitespace outside quotes
         } else if (Character.isWhitespace(ch)
                 && !insideSingleQuotes
                 && !insideDoubleQuotes) {
