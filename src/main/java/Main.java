@@ -103,40 +103,49 @@ public class Main {
 
     public static String[] tokenize(String command) {
 
-        List<String> arguments = new ArrayList<>();
+    List<String> arguments = new ArrayList<>();
 
-        StringBuilder current = new StringBuilder();
+    StringBuilder current = new StringBuilder();
 
-        boolean insideSingleQuotes = false;
+    boolean insideSingleQuotes = false;
+    boolean insideDoubleQuotes = false;
 
-        for (int i = 0; i < command.length(); i++) {
+    for (int i = 0; i < command.length(); i++) {
 
-            char ch = command.charAt(i);
+        char ch = command.charAt(i);
 
-            if (ch == '\'') {
+        // Single quote
+        if (ch == '\'' && !insideDoubleQuotes) {
 
-                insideSingleQuotes = !insideSingleQuotes;
+            insideSingleQuotes = !insideSingleQuotes;
 
-            } else if (Character.isWhitespace(ch)
-                    && !insideSingleQuotes) {
+        // Double quote
+        } else if (ch == '"' && !insideSingleQuotes) {
 
-                if (current.length() > 0) {
-                    arguments.add(current.toString());
-                    current.setLength(0);
-                }
+            insideDoubleQuotes = !insideDoubleQuotes;
 
-            } else {
+        // Space outside both types of quotes
+        } else if (Character.isWhitespace(ch)
+                && !insideSingleQuotes
+                && !insideDoubleQuotes) {
 
-                current.append(ch);
+            if (current.length() > 0) {
+                arguments.add(current.toString());
+                current.setLength(0);
             }
-        }
 
-        if (current.length() > 0) {
-            arguments.add(current.toString());
-        }
+        } else {
 
-        return arguments.toArray(new String[0]);
+            current.append(ch);
+        }
     }
+
+    if (current.length() > 0) {
+        arguments.add(current.toString());
+    }
+
+    return arguments.toArray(new String[0]);
+}
 
     public static String type(String command) {
 
