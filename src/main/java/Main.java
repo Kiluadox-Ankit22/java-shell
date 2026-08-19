@@ -114,28 +114,57 @@ public class Main {
 
         char ch = command.charAt(i);
 
+        // -----------------------------------------
         // Backslash outside quotes
+        // -----------------------------------------
         if (ch == '\\'
                 && !insideSingleQuotes
                 && !insideDoubleQuotes) {
 
-            // Take the next character literally
             if (i + 1 < command.length()) {
                 i++;
                 current.append(command.charAt(i));
             }
 
+        // -----------------------------------------
+        // Backslash inside double quotes
+        // Only escapes " and \
+        // -----------------------------------------
+        } else if (ch == '\\' && insideDoubleQuotes) {
+
+            if (i + 1 < command.length()) {
+
+                char next = command.charAt(i + 1);
+
+                if (next == '"' || next == '\\') {
+
+                    i++;
+                    current.append(next);
+
+                } else {
+
+                    // Backslash stays literal
+                    current.append('\\');
+                }
+            }
+
+        // -----------------------------------------
         // Single quote
+        // -----------------------------------------
         } else if (ch == '\'' && !insideDoubleQuotes) {
 
             insideSingleQuotes = !insideSingleQuotes;
 
+        // -----------------------------------------
         // Double quote
+        // -----------------------------------------
         } else if (ch == '"' && !insideSingleQuotes) {
 
             insideDoubleQuotes = !insideDoubleQuotes;
 
+        // -----------------------------------------
         // Whitespace outside quotes
+        // -----------------------------------------
         } else if (Character.isWhitespace(ch)
                 && !insideSingleQuotes
                 && !insideDoubleQuotes) {
@@ -145,6 +174,9 @@ public class Main {
                 current.setLength(0);
             }
 
+        // -----------------------------------------
+        // Normal character
+        // -----------------------------------------
         } else {
 
             current.append(ch);
