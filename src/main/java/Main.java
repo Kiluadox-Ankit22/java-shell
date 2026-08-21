@@ -1,4 +1,5 @@
 import java.io.File;
+import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
@@ -6,11 +7,14 @@ import java.util.Scanner;
 public class Main {
 
     public static void main(String[] args) throws Exception {
+
         Scanner sc = new Scanner(System.in);
 
-        File currentDirectory = new File(System.getProperty("user.dir"));
+        File currentDirectory =
+                new File(System.getProperty("user.dir"));
 
         while (true) {
+
             System.out.print("$ ");
             String command = sc.nextLine();
 
@@ -19,11 +23,12 @@ public class Main {
             }
 
             // -----------------------------------------
-            // Handle output redirection
+            // Parse output redirection
             // Supports:
             // >
             // 1>
             // -----------------------------------------
+
             String[] redirectParts = parseRedirection(command);
 
             String commandPart = redirectParts[0];
@@ -32,67 +37,96 @@ public class Main {
             // -----------------------------------------
             // cd
             // -----------------------------------------
+
             if (commandPart.startsWith("cd ")) {
 
-                String target = commandPart.substring(3).trim();
+                String target =
+                        commandPart.substring(3).trim();
 
                 File directory;
 
                 if (target.equals("~")) {
+
                     String home = System.getenv("HOME");
                     directory = new File(home);
 
                 } else if (target.startsWith("/")) {
+
                     directory = new File(target);
 
                 } else {
-                    directory = new File(currentDirectory, target);
+
+                    directory =
+                            new File(currentDirectory, target);
                 }
 
                 if (directory.isDirectory()) {
-                    currentDirectory = directory.getCanonicalFile();
+
+                    currentDirectory =
+                            directory.getCanonicalFile();
+
                 } else {
+
                     System.out.println(
-                        "cd: " + target + ": No such file or directory"
+                            "cd: " + target +
+                            ": No such file or directory"
                     );
                 }
+
+            }
 
             // -----------------------------------------
             // pwd
             // -----------------------------------------
-            } else if (commandPart.equals("pwd")) {
+
+            else if (commandPart.equals("pwd")) {
+
+                String output =
+                        currentDirectory.getAbsolutePath();
 
                 if (outputFile != null) {
 
-                    File file = new File(currentDirectory, outputFile);
+                    File file =
+                            getOutputFile(
+                                    currentDirectory,
+                                    outputFile
+                            );
 
-                    try (java.io.PrintStream out =
-                             new java.io.PrintStream(file)) {
+                    try (PrintStream out =
+                                 new PrintStream(file)) {
 
-                        out.println(currentDirectory.getAbsolutePath());
+                        out.println(output);
                     }
 
                 } else {
-                    System.out.println(
-                        currentDirectory.getAbsolutePath()
-                    );
+
+                    System.out.println(output);
                 }
+            }
 
             // -----------------------------------------
             // echo
             // -----------------------------------------
-            } else if (commandPart.startsWith("echo")) {
 
-                String[] parts = tokenize(commandPart);
+            else if (commandPart.startsWith("echo")) {
+
+                String[] parts =
+                        tokenize(commandPart);
 
                 if (outputFile != null) {
 
-                    File file = new File(currentDirectory, outputFile);
+                    File file =
+                            getOutputFile(
+                                    currentDirectory,
+                                    outputFile
+                            );
 
-                    try (java.io.PrintStream out =
-                             new java.io.PrintStream(file)) {
+                    try (PrintStream out =
+                                 new PrintStream(file)) {
 
-                        for (int i = 1; i < parts.length; i++) {
+                        for (int i = 1;
+                             i < parts.length;
+                             i++) {
 
                             if (i > 1) {
                                 out.print(" ");
@@ -106,7 +140,9 @@ public class Main {
 
                 } else {
 
-                    for (int i = 1; i < parts.length; i++) {
+                    for (int i = 1;
+                         i < parts.length;
+                         i++) {
 
                         if (i > 1) {
                             System.out.print(" ");
@@ -117,40 +153,51 @@ public class Main {
 
                     System.out.println();
                 }
+            }
 
             // -----------------------------------------
             // type
             // -----------------------------------------
-            } else if (commandPart.startsWith("type")) {
 
-                String[] parts = tokenize(commandPart);
+            else if (commandPart.startsWith("type")) {
+
+                String[] parts =
+                        tokenize(commandPart);
 
                 if (parts.length > 1) {
 
-                    String result = type(parts[1]);
+                    String result =
+                            type(parts[1]);
 
                     if (outputFile != null) {
 
                         File file =
-                            new File(currentDirectory, outputFile);
+                                getOutputFile(
+                                        currentDirectory,
+                                        outputFile
+                                );
 
-                        try (java.io.PrintStream out =
-                                 new java.io.PrintStream(file)) {
+                        try (PrintStream out =
+                                     new PrintStream(file)) {
 
                             out.println(result);
                         }
 
                     } else {
+
                         System.out.println(result);
                     }
                 }
+            }
 
             // -----------------------------------------
             // External commands
             // -----------------------------------------
-            } else {
 
-                String[] parts = tokenize(commandPart);
+            else {
+
+                String[] parts =
+                        tokenize(commandPart);
 
                 if (parts.length == 0) {
                     continue;
@@ -158,28 +205,34 @@ public class Main {
 
                 String programName = parts[0];
 
-                String executablePath = findExecutable(programName);
+                String executablePath =
+                        findExecutable(programName);
 
                 if (executablePath != null) {
 
                     ProcessBuilder processBuilder =
-                        new ProcessBuilder(parts);
+                            new ProcessBuilder(parts);
 
-                    processBuilder.directory(currentDirectory);
+                    processBuilder.directory(
+                            currentDirectory
+                    );
 
                     if (outputFile != null) {
 
                         File file =
-                            new File(currentDirectory, outputFile);
+                                getOutputFile(
+                                        currentDirectory,
+                                        outputFile
+                                );
 
                         // stdout -> file
                         processBuilder.redirectOutput(
-                            ProcessBuilder.Redirect.to(file)
+                                ProcessBuilder.Redirect.to(file)
                         );
 
                         // stderr -> terminal
                         processBuilder.redirectError(
-                            ProcessBuilder.Redirect.INHERIT
+                                ProcessBuilder.Redirect.INHERIT
                         );
 
                     } else {
@@ -188,13 +241,16 @@ public class Main {
                         processBuilder.inheritIO();
                     }
 
-                    Process process = processBuilder.start();
+                    Process process =
+                            processBuilder.start();
+
                     process.waitFor();
 
                 } else {
 
                     System.out.println(
-                        programName + ": command not found"
+                            programName +
+                            ": command not found"
                     );
                 }
             }
@@ -205,60 +261,39 @@ public class Main {
 
 
     // =====================================================
-    // Parse > and 1>
+    // Get output file
     // =====================================================
-    public static String[] parseRedirection(String command) {
 
-        // Check 1> first
-        int redirectIndex = command.indexOf("1>");
+    public static File getOutputFile(
+            File currentDirectory,
+            String outputFile) {
 
-        if (redirectIndex != -1) {
+        // Remove quotes from filename
+        String[] parts = tokenize(outputFile);
 
-            String commandPart =
-                command.substring(0, redirectIndex).trim();
-
-            String outputFile =
-                command.substring(redirectIndex + 2).trim();
-
-            return new String[] {
-                commandPart,
-                outputFile
-            };
+        if (parts.length == 0) {
+            return new File(currentDirectory, outputFile);
         }
 
-        // Check >
-        redirectIndex = command.indexOf(">");
+        String path = parts[0];
 
-        if (redirectIndex != -1) {
-
-            String commandPart =
-                command.substring(0, redirectIndex).trim();
-
-            String outputFile =
-                command.substring(redirectIndex + 1).trim();
-
-            return new String[] {
-                commandPart,
-                outputFile
-            };
+        // IMPORTANT:
+        // Absolute path must NOT be combined
+        // with currentDirectory.
+        if (path.startsWith("/")) {
+            return new File(path);
         }
 
-        // No redirection
-        return new String[] {
-            command,
-            null
-        };
+        // Relative path
+        return new File(currentDirectory, path);
     }
 
 
     // =====================================================
-    // Tokenizer
+    // Parse > and 1>
     // =====================================================
-    public static String[] tokenize(String command) {
 
-        List<String> arguments = new ArrayList<>();
-
-        StringBuilder current = new StringBuilder();
+    public static String[] parseRedirection(String command) {
 
         boolean insideSingleQuotes = false;
         boolean insideDoubleQuotes = false;
@@ -268,30 +303,142 @@ public class Main {
             char ch = command.charAt(i);
 
             // -----------------------------------------
+            // Handle backslash outside single quotes
+            // -----------------------------------------
+
+            if (ch == '\\' && !insideSingleQuotes) {
+
+                if (i + 1 < command.length()) {
+                    i++;
+                }
+
+                continue;
+            }
+
+            // -----------------------------------------
+            // Single quote
+            // -----------------------------------------
+
+            if (ch == '\'' && !insideDoubleQuotes) {
+
+                insideSingleQuotes =
+                        !insideSingleQuotes;
+
+                continue;
+            }
+
+            // -----------------------------------------
+            // Double quote
+            // -----------------------------------------
+
+            if (ch == '"' && !insideSingleQuotes) {
+
+                insideDoubleQuotes =
+                        !insideDoubleQuotes;
+
+                continue;
+            }
+
+            // -----------------------------------------
+            // Find >
+            // Only outside quotes
+            // -----------------------------------------
+
+            if (ch == '>'
+                    && !insideSingleQuotes
+                    && !insideDoubleQuotes) {
+
+                int redirectStart = i;
+
+                // Check for 1>
+                if (i > 0 &&
+                    command.charAt(i - 1) == '1') {
+
+                    redirectStart = i - 1;
+                }
+
+                String commandPart =
+                        command.substring(
+                                0,
+                                redirectStart
+                        ).trim();
+
+                String outputFile =
+                        command.substring(i + 1).trim();
+
+                return new String[] {
+                        commandPart,
+                        outputFile
+                };
+            }
+        }
+
+        // No redirection
+        return new String[] {
+                command,
+                null
+        };
+    }
+
+
+    // =====================================================
+    // Tokenizer
+    // =====================================================
+
+    public static String[] tokenize(String command) {
+
+        List<String> arguments =
+                new ArrayList<>();
+
+        StringBuilder current =
+                new StringBuilder();
+
+        boolean insideSingleQuotes = false;
+        boolean insideDoubleQuotes = false;
+
+        for (int i = 0;
+             i < command.length();
+             i++) {
+
+            char ch = command.charAt(i);
+
+            // -----------------------------------------
             // Backslash outside quotes
             // -----------------------------------------
+
             if (ch == '\\'
                     && !insideSingleQuotes
                     && !insideDoubleQuotes) {
 
                 if (i + 1 < command.length()) {
+
                     i++;
-                    current.append(command.charAt(i));
+
+                    current.append(
+                            command.charAt(i)
+                    );
                 }
+
+            }
 
             // -----------------------------------------
             // Backslash inside double quotes
             // Only escapes " and \
             // -----------------------------------------
-            } else if (ch == '\\' && insideDoubleQuotes) {
+
+            else if (ch == '\\'
+                    && insideDoubleQuotes) {
 
                 if (i + 1 < command.length()) {
 
-                    char next = command.charAt(i + 1);
+                    char next =
+                            command.charAt(i + 1);
 
-                    if (next == '"' || next == '\\') {
+                    if (next == '"' ||
+                        next == '\\') {
 
                         i++;
+
                         current.append(next);
 
                     } else {
@@ -300,82 +447,120 @@ public class Main {
                         current.append('\\');
                     }
                 }
+            }
 
             // -----------------------------------------
             // Single quote
             // -----------------------------------------
-            } else if (ch == '\'' && !insideDoubleQuotes) {
 
-                insideSingleQuotes = !insideSingleQuotes;
+            else if (ch == '\''
+                    && !insideDoubleQuotes) {
+
+                insideSingleQuotes =
+                        !insideSingleQuotes;
+            }
 
             // -----------------------------------------
             // Double quote
             // -----------------------------------------
-            } else if (ch == '"' && !insideSingleQuotes) {
 
-                insideDoubleQuotes = !insideDoubleQuotes;
+            else if (ch == '"'
+                    && !insideSingleQuotes) {
+
+                insideDoubleQuotes =
+                        !insideDoubleQuotes;
+            }
 
             // -----------------------------------------
             // Whitespace outside quotes
             // -----------------------------------------
-            } else if (Character.isWhitespace(ch)
+
+            else if (Character.isWhitespace(ch)
                     && !insideSingleQuotes
                     && !insideDoubleQuotes) {
 
                 if (current.length() > 0) {
 
-                    arguments.add(current.toString());
+                    arguments.add(
+                            current.toString()
+                    );
+
                     current.setLength(0);
                 }
+            }
 
             // -----------------------------------------
             // Normal character
             // -----------------------------------------
-            } else {
+
+            else {
 
                 current.append(ch);
             }
         }
 
         if (current.length() > 0) {
-            arguments.add(current.toString());
+
+            arguments.add(
+                    current.toString()
+            );
         }
 
-        return arguments.toArray(new String[0]);
+        return arguments.toArray(
+                new String[0]
+        );
     }
 
 
     // =====================================================
     // type command
     // =====================================================
+
     public static String type(String command) {
 
         String[] commands = {
-            "exit",
-            "echo",
-            "type",
-            "pwd",
-            "cd"
+                "exit",
+                "echo",
+                "type",
+                "pwd",
+                "cd"
         };
 
-        String path = System.getenv("PATH");
-        String[] pathDirs = path.split(":");
+        String path =
+                System.getenv("PATH");
 
-        for (int i = 0; i < commands.length; i++) {
+        String[] pathDirs =
+                path.split(":");
+
+        // Check shell builtins
+        for (int i = 0;
+             i < commands.length;
+             i++) {
 
             if (commands[i].equals(command)) {
-                return command + " is a shell builtin";
+
+                return command +
+                        " is a shell builtin";
             }
         }
 
-        for (int i = 0; i < pathDirs.length; i++) {
+        // Check PATH
+        for (int i = 0;
+             i < pathDirs.length;
+             i++) {
 
-            File file = new File(pathDirs[i], command);
+            File file =
+                    new File(
+                            pathDirs[i],
+                            command
+                    );
 
-            if (file.exists() && file.canExecute()) {
+            if (file.exists()
+                    && file.canExecute()) {
 
-                return command + " is " +
-                       file.getAbsolutePath();
+                return command +
+                        " is " +
+                        file.getAbsolutePath();
             }
         }
 
@@ -386,16 +571,29 @@ public class Main {
     // =====================================================
     // Find executable
     // =====================================================
-    public static String findExecutable(String command) {
 
-        String path = System.getenv("PATH");
-        String[] pathDirs = path.split(":");
+    public static String findExecutable(
+            String command) {
 
-        for (int i = 0; i < pathDirs.length; i++) {
+        String path =
+                System.getenv("PATH");
 
-            File file = new File(pathDirs[i], command);
+        String[] pathDirs =
+                path.split(":");
 
-            if (file.exists() && file.canExecute()) {
+        for (int i = 0;
+             i < pathDirs.length;
+             i++) {
+
+            File file =
+                    new File(
+                            pathDirs[i],
+                            command
+                    );
+
+            if (file.exists()
+                    && file.canExecute()) {
+
                 return file.getAbsolutePath();
             }
         }
