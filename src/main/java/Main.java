@@ -16,10 +16,25 @@ public class Main {
 
             if (command.equals("exit")) {
                 break;
+            }
 
-            } else if (command.startsWith("cd ")) {
+            // -----------------------------------------
+            // Handle output redirection
+            // Supports:
+            // >
+            // 1>
+            // -----------------------------------------
+            String[] redirectParts = parseRedirection(command);
 
-                String target = command.substring(3).trim();
+            String commandPart = redirectParts[0];
+            String outputFile = redirectParts[1];
+
+            // -----------------------------------------
+            // cd
+            // -----------------------------------------
+            if (commandPart.startsWith("cd ")) {
+
+                String target = commandPart.substring(3).trim();
 
                 File directory;
 
@@ -42,34 +57,100 @@ public class Main {
                     );
                 }
 
-            } else if (command.equals("pwd")) {
+            // -----------------------------------------
+            // pwd
+            // -----------------------------------------
+            } else if (commandPart.equals("pwd")) {
 
-                System.out.println(currentDirectory.getAbsolutePath());
+                if (outputFile != null) {
 
-            } else if (command.startsWith("echo")) {
+                    File file = new File(currentDirectory, outputFile);
 
-                String[] parts = tokenize(command);
+                    try (java.io.PrintStream out =
+                             new java.io.PrintStream(file)) {
 
-                for (int i = 1; i < parts.length; i++) {
-                    if (i > 1) {
-                        System.out.print(" ");
+                        out.println(currentDirectory.getAbsolutePath());
                     }
-                    System.out.print(parts[i]);
+
+                } else {
+                    System.out.println(
+                        currentDirectory.getAbsolutePath()
+                    );
                 }
 
-                System.out.println();
+            // -----------------------------------------
+            // echo
+            // -----------------------------------------
+            } else if (commandPart.startsWith("echo")) {
 
-            } else if (command.startsWith("type")) {
+                String[] parts = tokenize(commandPart);
 
-                String[] parts = tokenize(command);
+                if (outputFile != null) {
+
+                    File file = new File(currentDirectory, outputFile);
+
+                    try (java.io.PrintStream out =
+                             new java.io.PrintStream(file)) {
+
+                        for (int i = 1; i < parts.length; i++) {
+
+                            if (i > 1) {
+                                out.print(" ");
+                            }
+
+                            out.print(parts[i]);
+                        }
+
+                        out.println();
+                    }
+
+                } else {
+
+                    for (int i = 1; i < parts.length; i++) {
+
+                        if (i > 1) {
+                            System.out.print(" ");
+                        }
+
+                        System.out.print(parts[i]);
+                    }
+
+                    System.out.println();
+                }
+
+            // -----------------------------------------
+            // type
+            // -----------------------------------------
+            } else if (commandPart.startsWith("type")) {
+
+                String[] parts = tokenize(commandPart);
 
                 if (parts.length > 1) {
-                    System.out.println(type(parts[1]));
+
+                    String result = type(parts[1]);
+
+                    if (outputFile != null) {
+
+                        File file =
+                            new File(currentDirectory, outputFile);
+
+                        try (java.io.PrintStream out =
+                                 new java.io.PrintStream(file)) {
+
+                            out.println(result);
+                        }
+
+                    } else {
+                        System.out.println(result);
+                    }
                 }
 
+            // -----------------------------------------
+            // External commands
+            // -----------------------------------------
             } else {
 
-                String[] parts = tokenize(command);
+                String[] parts = tokenize(commandPart);
 
                 if (parts.length == 0) {
                     continue;
@@ -85,14 +166,35 @@ public class Main {
                         new ProcessBuilder(parts);
 
                     processBuilder.directory(currentDirectory);
-                    processBuilder.inheritIO();
+
+                    if (outputFile != null) {
+
+                        File file =
+                            new File(currentDirectory, outputFile);
+
+                        // stdout -> file
+                        processBuilder.redirectOutput(
+                            ProcessBuilder.Redirect.to(file)
+                        );
+
+                        // stderr -> terminal
+                        processBuilder.redirectError(
+                            ProcessBuilder.Redirect.INHERIT
+                        );
+
+                    } else {
+
+                        // stdout + stderr -> terminal
+                        processBuilder.inheritIO();
+                    }
 
                     Process process = processBuilder.start();
                     process.waitFor();
 
                 } else {
+
                     System.out.println(
-                        command + ": command not found"
+                        programName + ": command not found"
                     );
                 }
             }
@@ -101,95 +203,151 @@ public class Main {
         sc.close();
     }
 
+
+    // =====================================================
+    // Parse > and 1>
+    // =====================================================
+    public static String[] parseRedirection(String command) {
+
+        // Check 1> first
+        int redirectIndex = command.indexOf("1>");
+
+        if (redirectIndex != -1) {
+
+            String commandPart =
+                command.substring(0, redirectIndex).trim();
+
+            String outputFile =
+                command.substring(redirectIndex + 2).trim();
+
+            return new String[] {
+                commandPart,
+                outputFile
+            };
+        }
+
+        // Check >
+        redirectIndex = command.indexOf(">");
+
+        if (redirectIndex != -1) {
+
+            String commandPart =
+                command.substring(0, redirectIndex).trim();
+
+            String outputFile =
+                command.substring(redirectIndex + 1).trim();
+
+            return new String[] {
+                commandPart,
+                outputFile
+            };
+        }
+
+        // No redirection
+        return new String[] {
+            command,
+            null
+        };
+    }
+
+
+    // =====================================================
+    // Tokenizer
+    // =====================================================
     public static String[] tokenize(String command) {
 
-    List<String> arguments = new ArrayList<>();
+        List<String> arguments = new ArrayList<>();
 
-    StringBuilder current = new StringBuilder();
+        StringBuilder current = new StringBuilder();
 
-    boolean insideSingleQuotes = false;
-    boolean insideDoubleQuotes = false;
+        boolean insideSingleQuotes = false;
+        boolean insideDoubleQuotes = false;
 
-    for (int i = 0; i < command.length(); i++) {
+        for (int i = 0; i < command.length(); i++) {
 
-        char ch = command.charAt(i);
+            char ch = command.charAt(i);
 
-        // -----------------------------------------
-        // Backslash outside quotes
-        // -----------------------------------------
-        if (ch == '\\'
-                && !insideSingleQuotes
-                && !insideDoubleQuotes) {
+            // -----------------------------------------
+            // Backslash outside quotes
+            // -----------------------------------------
+            if (ch == '\\'
+                    && !insideSingleQuotes
+                    && !insideDoubleQuotes) {
 
-            if (i + 1 < command.length()) {
-                i++;
-                current.append(command.charAt(i));
-            }
-
-        // -----------------------------------------
-        // Backslash inside double quotes
-        // Only escapes " and \
-        // -----------------------------------------
-        } else if (ch == '\\' && insideDoubleQuotes) {
-
-            if (i + 1 < command.length()) {
-
-                char next = command.charAt(i + 1);
-
-                if (next == '"' || next == '\\') {
-
+                if (i + 1 < command.length()) {
                     i++;
-                    current.append(next);
-
-                } else {
-
-                    // Backslash stays literal
-                    current.append('\\');
+                    current.append(command.charAt(i));
                 }
+
+            // -----------------------------------------
+            // Backslash inside double quotes
+            // Only escapes " and \
+            // -----------------------------------------
+            } else if (ch == '\\' && insideDoubleQuotes) {
+
+                if (i + 1 < command.length()) {
+
+                    char next = command.charAt(i + 1);
+
+                    if (next == '"' || next == '\\') {
+
+                        i++;
+                        current.append(next);
+
+                    } else {
+
+                        // Backslash stays literal
+                        current.append('\\');
+                    }
+                }
+
+            // -----------------------------------------
+            // Single quote
+            // -----------------------------------------
+            } else if (ch == '\'' && !insideDoubleQuotes) {
+
+                insideSingleQuotes = !insideSingleQuotes;
+
+            // -----------------------------------------
+            // Double quote
+            // -----------------------------------------
+            } else if (ch == '"' && !insideSingleQuotes) {
+
+                insideDoubleQuotes = !insideDoubleQuotes;
+
+            // -----------------------------------------
+            // Whitespace outside quotes
+            // -----------------------------------------
+            } else if (Character.isWhitespace(ch)
+                    && !insideSingleQuotes
+                    && !insideDoubleQuotes) {
+
+                if (current.length() > 0) {
+
+                    arguments.add(current.toString());
+                    current.setLength(0);
+                }
+
+            // -----------------------------------------
+            // Normal character
+            // -----------------------------------------
+            } else {
+
+                current.append(ch);
             }
-
-        // -----------------------------------------
-        // Single quote
-        // -----------------------------------------
-        } else if (ch == '\'' && !insideDoubleQuotes) {
-
-            insideSingleQuotes = !insideSingleQuotes;
-
-        // -----------------------------------------
-        // Double quote
-        // -----------------------------------------
-        } else if (ch == '"' && !insideSingleQuotes) {
-
-            insideDoubleQuotes = !insideDoubleQuotes;
-
-        // -----------------------------------------
-        // Whitespace outside quotes
-        // -----------------------------------------
-        } else if (Character.isWhitespace(ch)
-                && !insideSingleQuotes
-                && !insideDoubleQuotes) {
-
-            if (current.length() > 0) {
-                arguments.add(current.toString());
-                current.setLength(0);
-            }
-
-        // -----------------------------------------
-        // Normal character
-        // -----------------------------------------
-        } else {
-
-            current.append(ch);
         }
+
+        if (current.length() > 0) {
+            arguments.add(current.toString());
+        }
+
+        return arguments.toArray(new String[0]);
     }
 
-    if (current.length() > 0) {
-        arguments.add(current.toString());
-    }
 
-    return arguments.toArray(new String[0]);
-}
-
+    // =====================================================
+    // type command
+    // =====================================================
     public static String type(String command) {
 
         String[] commands = {
@@ -215,13 +373,19 @@ public class Main {
             File file = new File(pathDirs[i], command);
 
             if (file.exists() && file.canExecute()) {
-                return command + " is " + file.getAbsolutePath();
+
+                return command + " is " +
+                       file.getAbsolutePath();
             }
         }
 
         return command + ": not found";
     }
 
+
+    // =====================================================
+    // Find executable
+    // =====================================================
     public static String findExecutable(String command) {
 
         String path = System.getenv("PATH");
