@@ -1,4 +1,5 @@
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.List;
@@ -30,6 +31,7 @@ public class Main {
             // >>
             // 1>>
             // 2>
+            // 2>>
             // -----------------------------------------
 
             String[] redirectParts =
@@ -38,8 +40,12 @@ public class Main {
             String commandPart = redirectParts[0];
             String stdoutFile = redirectParts[1];
             String stderrFile = redirectParts[2];
-            boolean appendOutput =
+
+            boolean appendStdout =
                     Boolean.parseBoolean(redirectParts[3]);
+
+            boolean appendStderr =
+                    Boolean.parseBoolean(redirectParts[4]);
 
             // -----------------------------------------
             // cd
@@ -83,7 +89,10 @@ public class Main {
                                 );
 
                         try (PrintStream err =
-                                     new PrintStream(file)) {
+                                     createOutputStream(
+                                             file,
+                                             appendStderr
+                                     )) {
 
                             err.println(
                                     "cd: " + target +
@@ -100,8 +109,7 @@ public class Main {
                     }
                 }
 
-                // Create/truncate/append stdout file
-                // even though cd normally produces no stdout.
+                // Create stdout file if redirection exists.
                 if (stdoutFile != null) {
 
                     File file =
@@ -110,7 +118,7 @@ public class Main {
                                     stdoutFile
                             );
 
-                    if (appendOutput) {
+                    if (appendStdout) {
                         createAppendFile(file);
                     } else {
                         createEmptyFile(file);
@@ -124,7 +132,8 @@ public class Main {
 
             else if (commandPart.equals("pwd")) {
 
-                // 2> creates an empty stderr file
+                // 2> / 2>> must create the file even
+                // when pwd produces no stderr.
                 if (stderrFile != null) {
 
                     File file =
@@ -133,7 +142,11 @@ public class Main {
                                     stderrFile
                             );
 
-                    createEmptyFile(file);
+                    if (appendStderr) {
+                        createAppendFile(file);
+                    } else {
+                        createEmptyFile(file);
+                    }
                 }
 
                 String output =
@@ -150,7 +163,7 @@ public class Main {
                     try (PrintStream out =
                                  createOutputStream(
                                          file,
-                                         appendOutput
+                                         appendStdout
                                  )) {
 
                         out.println(output);
@@ -169,7 +182,9 @@ public class Main {
             else if (commandPart.startsWith("echo")) {
 
                 // echo normally produces no stderr.
-                // 2> still creates the file.
+                // But 2> and 2>> must still create
+                // the specified file.
+
                 if (stderrFile != null) {
 
                     File file =
@@ -178,7 +193,11 @@ public class Main {
                                     stderrFile
                             );
 
-                    createEmptyFile(file);
+                    if (appendStderr) {
+                        createAppendFile(file);
+                    } else {
+                        createEmptyFile(file);
+                    }
                 }
 
                 String[] parts =
@@ -195,7 +214,7 @@ public class Main {
                     try (PrintStream out =
                                  createOutputStream(
                                          file,
-                                         appendOutput
+                                         appendStdout
                                  )) {
 
                         for (int i = 1;
@@ -236,7 +255,6 @@ public class Main {
             else if (commandPart.startsWith("type")) {
 
                 // type normally produces no stderr.
-                // 2> still creates the file.
                 if (stderrFile != null) {
 
                     File file =
@@ -245,7 +263,11 @@ public class Main {
                                     stderrFile
                             );
 
-                    createEmptyFile(file);
+                    if (appendStderr) {
+                        createAppendFile(file);
+                    } else {
+                        createEmptyFile(file);
+                    }
                 }
 
                 String[] parts =
@@ -267,7 +289,7 @@ public class Main {
                         try (PrintStream out =
                                      createOutputStream(
                                              file,
-                                             appendOutput
+                                             appendStdout
                                      )) {
 
                             out.println(result);
@@ -319,7 +341,7 @@ public class Main {
                                         stdoutFile
                                 );
 
-                        if (appendOutput) {
+                        if (appendStdout) {
 
                             processBuilder.redirectOutput(
                                     ProcessBuilder.Redirect.appendTo(
@@ -355,9 +377,22 @@ public class Main {
                                         stderrFile
                                 );
 
-                        processBuilder.redirectError(
-                                ProcessBuilder.Redirect.to(file)
-                        );
+                        if (appendStderr) {
+
+                            processBuilder.redirectError(
+                                    ProcessBuilder.Redirect.appendTo(
+                                            file
+                                    )
+                            );
+
+                        } else {
+
+                            processBuilder.redirectError(
+                                    ProcessBuilder.Redirect.to(
+                                            file
+                                    )
+                            );
+                        }
 
                     } else {
 
@@ -384,7 +419,10 @@ public class Main {
                                 );
 
                         try (PrintStream err =
-                                     new PrintStream(file)) {
+                                     createOutputStream(
+                                             file,
+                                             appendStderr
+                                     )) {
 
                             err.println(
                                     programName +
@@ -448,7 +486,7 @@ public class Main {
 
 
     // =====================================================
-    // Create file in append mode
+    // Create/open file in append mode
     // =====================================================
 
     public static void createAppendFile(
@@ -456,18 +494,18 @@ public class Main {
 
         try (PrintStream out =
                      new PrintStream(
-                             new java.io.FileOutputStream(
+                             new FileOutputStream(
                                      file,
                                      true
                              )
                      )) {
-            // Nothing to write.
+            // Empty
         }
     }
 
 
     // =====================================================
-    // Create PrintStream for stdout
+    // Create PrintStream
     // =====================================================
 
     public static PrintStream createOutputStream(
@@ -477,7 +515,7 @@ public class Main {
         if (append) {
 
             return new PrintStream(
-                    new java.io.FileOutputStream(
+                    new FileOutputStream(
                             file,
                             true
                     )
@@ -499,6 +537,7 @@ public class Main {
     // >>
     // 1>>
     // 2>
+    // 2>>
     // =====================================================
 
     public static String[] parseRedirection(
@@ -564,88 +603,56 @@ public class Main {
                 String commandPart;
                 String filePart;
 
-                boolean append = false;
+                boolean append =
+                        i + 1 < command.length()
+                        && command.charAt(i + 1) == '>';
 
                 // -------------------------------------
-                // Check for >>
+                // Determine file descriptor
                 // -------------------------------------
 
-                if (i + 1 < command.length()
-                        && command.charAt(i + 1) == '>') {
+                int descriptor = 1;
 
-                    append = true;
+                if (i > 0) {
+
+                    char previous =
+                            command.charAt(i - 1);
+
+                    if (previous == '1') {
+                        descriptor = 1;
+                    } else if (previous == '2') {
+                        descriptor = 2;
+                    }
                 }
 
                 // -------------------------------------
-                // 2> or 2>>
-                //
-                // For this stage we only redirect
-                // stderr with 2>. 
+                // Find beginning of command
                 // -------------------------------------
 
-                if (i > 0
-                        && command.charAt(i - 1) == '2') {
+                int commandEnd = i;
 
-                    commandPart =
-                            command.substring(
-                                    0,
-                                    i - 1
-                            ).trim();
+                if (descriptor == 1 &&
+                        i > 0 &&
+                        command.charAt(i - 1) == '1') {
 
-                    int fileStart =
-                            i + (append ? 2 : 1);
+                    commandEnd = i - 1;
 
-                    filePart =
-                            command.substring(
-                                    fileStart
-                            ).trim();
+                } else if (descriptor == 2 &&
+                        i > 0 &&
+                        command.charAt(i - 1) == '2') {
 
-                    return new String[] {
-                            commandPart,
-                            null,
-                            filePart,
-                            "false"
-                    };
+                    commandEnd = i - 1;
                 }
-
-                // -------------------------------------
-                // 1> or 1>>
-                // -------------------------------------
-
-                if (i > 0
-                        && command.charAt(i - 1) == '1') {
-
-                    commandPart =
-                            command.substring(
-                                    0,
-                                    i - 1
-                            ).trim();
-
-                    int fileStart =
-                            i + (append ? 2 : 1);
-
-                    filePart =
-                            command.substring(
-                                    fileStart
-                            ).trim();
-
-                    return new String[] {
-                            commandPart,
-                            filePart,
-                            null,
-                            String.valueOf(append)
-                    };
-                }
-
-                // -------------------------------------
-                // >
-                // -------------------------------------
 
                 commandPart =
                         command.substring(
                                 0,
-                                i
+                                commandEnd
                         ).trim();
+
+                // -------------------------------------
+                // Find beginning of filename
+                // -------------------------------------
 
                 int fileStart =
                         i + (append ? 2 : 1);
@@ -655,12 +662,36 @@ public class Main {
                                 fileStart
                         ).trim();
 
-                return new String[] {
-                        commandPart,
-                        filePart,
-                        null,
-                        String.valueOf(append)
-                };
+                // -------------------------------------
+                // Return result
+                //
+                // [0] command
+                // [1] stdout file
+                // [2] stderr file
+                // [3] append stdout
+                // [4] append stderr
+                // -------------------------------------
+
+                if (descriptor == 2) {
+
+                    return new String[] {
+                            commandPart,
+                            null,
+                            filePart,
+                            "false",
+                            String.valueOf(append)
+                    };
+
+                } else {
+
+                    return new String[] {
+                            commandPart,
+                            filePart,
+                            null,
+                            String.valueOf(append),
+                            "false"
+                    };
+                }
             }
         }
 
@@ -672,6 +703,7 @@ public class Main {
                 command,
                 null,
                 null,
+                "false",
                 "false"
         };
     }
@@ -719,7 +751,6 @@ public class Main {
 
             // -----------------------------------------
             // Backslash inside double quotes
-            // Only escapes " and \
             // -----------------------------------------
 
             else if (ch == '\\'
