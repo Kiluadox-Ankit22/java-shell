@@ -24,9 +24,11 @@ public class Main {
 
             // -----------------------------------------
             // Parse redirection
-            // Supports:
+            //
             // >
             // 1>
+            // >>
+            // 1>>
             // 2>
             // -----------------------------------------
 
@@ -36,6 +38,8 @@ public class Main {
             String commandPart = redirectParts[0];
             String stdoutFile = redirectParts[1];
             String stderrFile = redirectParts[2];
+            boolean appendOutput =
+                    Boolean.parseBoolean(redirectParts[3]);
 
             // -----------------------------------------
             // cd
@@ -70,9 +74,6 @@ public class Main {
 
                 } else {
 
-                    // 2> must create the file even if
-                    // this builtin produces an error.
-
                     if (stderrFile != null) {
 
                         File file =
@@ -99,7 +100,8 @@ public class Main {
                     }
                 }
 
-                // If 1> is supplied with cd, create the file.
+                // Create/truncate/append stdout file
+                // even though cd normally produces no stdout.
                 if (stdoutFile != null) {
 
                     File file =
@@ -108,7 +110,11 @@ public class Main {
                                     stdoutFile
                             );
 
-                    createEmptyFile(file);
+                    if (appendOutput) {
+                        createAppendFile(file);
+                    } else {
+                        createEmptyFile(file);
+                    }
                 }
             }
 
@@ -118,9 +124,7 @@ public class Main {
 
             else if (commandPart.equals("pwd")) {
 
-                // 2> must create an empty stderr file
-                // even though pwd has no error.
-
+                // 2> creates an empty stderr file
                 if (stderrFile != null) {
 
                     File file =
@@ -144,7 +148,10 @@ public class Main {
                             );
 
                     try (PrintStream out =
-                                 new PrintStream(file)) {
+                                 createOutputStream(
+                                         file,
+                                         appendOutput
+                                 )) {
 
                         out.println(output);
                     }
@@ -161,10 +168,8 @@ public class Main {
 
             else if (commandPart.startsWith("echo")) {
 
-                // IMPORTANT:
-                // echo doesn't normally write stderr.
-                // But 2> still has to create the file.
-
+                // echo normally produces no stderr.
+                // 2> still creates the file.
                 if (stderrFile != null) {
 
                     File file =
@@ -188,7 +193,10 @@ public class Main {
                             );
 
                     try (PrintStream out =
-                                 new PrintStream(file)) {
+                                 createOutputStream(
+                                         file,
+                                         appendOutput
+                                 )) {
 
                         for (int i = 1;
                              i < parts.length;
@@ -227,9 +235,8 @@ public class Main {
 
             else if (commandPart.startsWith("type")) {
 
-                // type normally doesn't write stderr.
-                // 2> must still create the file.
-
+                // type normally produces no stderr.
+                // 2> still creates the file.
                 if (stderrFile != null) {
 
                     File file =
@@ -258,7 +265,10 @@ public class Main {
                                 );
 
                         try (PrintStream out =
-                                     new PrintStream(file)) {
+                                     createOutputStream(
+                                             file,
+                                             appendOutput
+                                     )) {
 
                             out.println(result);
                         }
@@ -309,9 +319,22 @@ public class Main {
                                         stdoutFile
                                 );
 
-                        processBuilder.redirectOutput(
-                                ProcessBuilder.Redirect.to(file)
-                        );
+                        if (appendOutput) {
+
+                            processBuilder.redirectOutput(
+                                    ProcessBuilder.Redirect.appendTo(
+                                            file
+                                    )
+                            );
+
+                        } else {
+
+                            processBuilder.redirectOutput(
+                                    ProcessBuilder.Redirect.to(
+                                            file
+                                    )
+                            );
+                        }
 
                     } else {
 
@@ -411,12 +434,11 @@ public class Main {
 
 
     // =====================================================
-    // Create empty file
-    // Used for 2> on builtins that produce no error
+    // Create/truncate an empty file
     // =====================================================
 
-    public static void createEmptyFile(File file)
-            throws Exception {
+    public static void createEmptyFile(
+            File file) throws Exception {
 
         try (PrintStream out =
                      new PrintStream(file)) {
@@ -426,7 +448,57 @@ public class Main {
 
 
     // =====================================================
+    // Create file in append mode
+    // =====================================================
+
+    public static void createAppendFile(
+            File file) throws Exception {
+
+        try (PrintStream out =
+                     new PrintStream(
+                             new java.io.FileOutputStream(
+                                     file,
+                                     true
+                             )
+                     )) {
+            // Nothing to write.
+        }
+    }
+
+
+    // =====================================================
+    // Create PrintStream for stdout
+    // =====================================================
+
+    public static PrintStream createOutputStream(
+            File file,
+            boolean append) throws Exception {
+
+        if (append) {
+
+            return new PrintStream(
+                    new java.io.FileOutputStream(
+                            file,
+                            true
+                    )
+            );
+
+        } else {
+
+            return new PrintStream(file);
+        }
+    }
+
+
+    // =====================================================
     // Parse redirection
+    //
+    // Supports:
+    // >
+    // 1>
+    // >>
+    // 1>>
+    // 2>
     // =====================================================
 
     public static String[] parseRedirection(
@@ -482,7 +554,7 @@ public class Main {
             }
 
             // -----------------------------------------
-            // Redirection
+            // Redirection operator
             // -----------------------------------------
 
             if (ch == '>'
@@ -492,12 +564,27 @@ public class Main {
                 String commandPart;
                 String filePart;
 
+                boolean append = false;
+
                 // -------------------------------------
-                // 2>
+                // Check for >>
                 // -------------------------------------
 
-                if (i > 0 &&
-                        command.charAt(i - 1) == '2') {
+                if (i + 1 < command.length()
+                        && command.charAt(i + 1) == '>') {
+
+                    append = true;
+                }
+
+                // -------------------------------------
+                // 2> or 2>>
+                //
+                // For this stage we only redirect
+                // stderr with 2>. 
+                // -------------------------------------
+
+                if (i > 0
+                        && command.charAt(i - 1) == '2') {
 
                     commandPart =
                             command.substring(
@@ -505,24 +592,28 @@ public class Main {
                                     i - 1
                             ).trim();
 
+                    int fileStart =
+                            i + (append ? 2 : 1);
+
                     filePart =
                             command.substring(
-                                    i + 1
+                                    fileStart
                             ).trim();
 
                     return new String[] {
                             commandPart,
                             null,
-                            filePart
+                            filePart,
+                            "false"
                     };
                 }
 
                 // -------------------------------------
-                // 1>
+                // 1> or 1>>
                 // -------------------------------------
 
-                if (i > 0 &&
-                        command.charAt(i - 1) == '1') {
+                if (i > 0
+                        && command.charAt(i - 1) == '1') {
 
                     commandPart =
                             command.substring(
@@ -530,15 +621,19 @@ public class Main {
                                     i - 1
                             ).trim();
 
+                    int fileStart =
+                            i + (append ? 2 : 1);
+
                     filePart =
                             command.substring(
-                                    i + 1
+                                    fileStart
                             ).trim();
 
                     return new String[] {
                             commandPart,
                             filePart,
-                            null
+                            null,
+                            String.valueOf(append)
                     };
                 }
 
@@ -552,24 +647,32 @@ public class Main {
                                 i
                         ).trim();
 
+                int fileStart =
+                        i + (append ? 2 : 1);
+
                 filePart =
                         command.substring(
-                                i + 1
+                                fileStart
                         ).trim();
 
                 return new String[] {
                         commandPart,
                         filePart,
-                        null
+                        null,
+                        String.valueOf(append)
                 };
             }
         }
 
+        // -----------------------------------------
         // No redirection
+        // -----------------------------------------
+
         return new String[] {
                 command,
                 null,
-                null
+                null,
+                "false"
         };
     }
 
@@ -616,6 +719,7 @@ public class Main {
 
             // -----------------------------------------
             // Backslash inside double quotes
+            // Only escapes " and \
             // -----------------------------------------
 
             else if (ch == '\\'
@@ -663,7 +767,7 @@ public class Main {
             }
 
             // -----------------------------------------
-            // Whitespace
+            // Whitespace outside quotes
             // -----------------------------------------
 
             else if (Character.isWhitespace(ch)
@@ -704,7 +808,7 @@ public class Main {
 
 
     // =====================================================
-    // type
+    // type command
     // =====================================================
 
     public static String type(
