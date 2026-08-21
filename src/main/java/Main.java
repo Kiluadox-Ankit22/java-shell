@@ -34,8 +34,8 @@ public class Main {
                     parseRedirection(command);
 
             String commandPart = redirectParts[0];
-            String outputFile = redirectParts[1];
-            String errorFile = redirectParts[2];
+            String stdoutFile = redirectParts[1];
+            String stderrFile = redirectParts[2];
 
             // -----------------------------------------
             // cd
@@ -70,12 +70,15 @@ public class Main {
 
                 } else {
 
-                    if (errorFile != null) {
+                    // 2> must create the file even if
+                    // this builtin produces an error.
+
+                    if (stderrFile != null) {
 
                         File file =
-                                getOutputFile(
+                                getFile(
                                         currentDirectory,
-                                        errorFile
+                                        stderrFile
                                 );
 
                         try (PrintStream err =
@@ -95,6 +98,18 @@ public class Main {
                         );
                     }
                 }
+
+                // If 1> is supplied with cd, create the file.
+                if (stdoutFile != null) {
+
+                    File file =
+                            getFile(
+                                    currentDirectory,
+                                    stdoutFile
+                            );
+
+                    createEmptyFile(file);
+                }
             }
 
             // -----------------------------------------
@@ -103,15 +118,29 @@ public class Main {
 
             else if (commandPart.equals("pwd")) {
 
+                // 2> must create an empty stderr file
+                // even though pwd has no error.
+
+                if (stderrFile != null) {
+
+                    File file =
+                            getFile(
+                                    currentDirectory,
+                                    stderrFile
+                            );
+
+                    createEmptyFile(file);
+                }
+
                 String output =
                         currentDirectory.getAbsolutePath();
 
-                if (outputFile != null) {
+                if (stdoutFile != null) {
 
                     File file =
-                            getOutputFile(
+                            getFile(
                                     currentDirectory,
-                                    outputFile
+                                    stdoutFile
                             );
 
                     try (PrintStream out =
@@ -132,15 +161,30 @@ public class Main {
 
             else if (commandPart.startsWith("echo")) {
 
+                // IMPORTANT:
+                // echo doesn't normally write stderr.
+                // But 2> still has to create the file.
+
+                if (stderrFile != null) {
+
+                    File file =
+                            getFile(
+                                    currentDirectory,
+                                    stderrFile
+                            );
+
+                    createEmptyFile(file);
+                }
+
                 String[] parts =
                         tokenize(commandPart);
 
-                if (outputFile != null) {
+                if (stdoutFile != null) {
 
                     File file =
-                            getOutputFile(
+                            getFile(
                                     currentDirectory,
-                                    outputFile
+                                    stdoutFile
                             );
 
                     try (PrintStream out =
@@ -183,6 +227,20 @@ public class Main {
 
             else if (commandPart.startsWith("type")) {
 
+                // type normally doesn't write stderr.
+                // 2> must still create the file.
+
+                if (stderrFile != null) {
+
+                    File file =
+                            getFile(
+                                    currentDirectory,
+                                    stderrFile
+                            );
+
+                    createEmptyFile(file);
+                }
+
                 String[] parts =
                         tokenize(commandPart);
 
@@ -191,12 +249,12 @@ public class Main {
                     String result =
                             type(parts[1]);
 
-                    if (outputFile != null) {
+                    if (stdoutFile != null) {
 
                         File file =
-                                getOutputFile(
+                                getFile(
                                         currentDirectory,
-                                        outputFile
+                                        stdoutFile
                                 );
 
                         try (PrintStream out =
@@ -213,7 +271,7 @@ public class Main {
             }
 
             // -----------------------------------------
-            // External commands
+            // External command
             // -----------------------------------------
 
             else {
@@ -240,15 +298,15 @@ public class Main {
                     );
 
                     // ---------------------------------
-                    // stdout
+                    // STDOUT
                     // ---------------------------------
 
-                    if (outputFile != null) {
+                    if (stdoutFile != null) {
 
                         File file =
-                                getOutputFile(
+                                getFile(
                                         currentDirectory,
-                                        outputFile
+                                        stdoutFile
                                 );
 
                         processBuilder.redirectOutput(
@@ -263,15 +321,15 @@ public class Main {
                     }
 
                     // ---------------------------------
-                    // stderr
+                    // STDERR
                     // ---------------------------------
 
-                    if (errorFile != null) {
+                    if (stderrFile != null) {
 
                         File file =
-                                getOutputFile(
+                                getFile(
                                         currentDirectory,
-                                        errorFile
+                                        stderrFile
                                 );
 
                         processBuilder.redirectError(
@@ -293,12 +351,13 @@ public class Main {
                 } else {
 
                     // command not found is stderr
-                    if (errorFile != null) {
+
+                    if (stderrFile != null) {
 
                         File file =
-                                getOutputFile(
+                                getFile(
                                         currentDirectory,
-                                        errorFile
+                                        stderrFile
                                 );
 
                         try (PrintStream err =
@@ -326,21 +385,20 @@ public class Main {
 
 
     // =====================================================
-    // Get output/error file
+    // Get file
     // =====================================================
 
-    public static File getOutputFile(
+    public static File getFile(
             File currentDirectory,
-            String outputFile) {
+            String path) {
 
-        String[] parts =
-                tokenize(outputFile);
+        String[] parts = tokenize(path);
 
         if (parts.length == 0) {
-            return new File(currentDirectory, outputFile);
+            return new File(currentDirectory, path);
         }
 
-        String path = parts[0];
+        path = parts[0];
 
         // Absolute path
         if (path.startsWith("/")) {
@@ -353,12 +411,22 @@ public class Main {
 
 
     // =====================================================
+    // Create empty file
+    // Used for 2> on builtins that produce no error
+    // =====================================================
+
+    public static void createEmptyFile(File file)
+            throws Exception {
+
+        try (PrintStream out =
+                     new PrintStream(file)) {
+            // Empty
+        }
+    }
+
+
+    // =====================================================
     // Parse redirection
-    //
-    // Supports:
-    // >
-    // 1>
-    // 2>
     // =====================================================
 
     public static String[] parseRedirection(
@@ -377,7 +445,8 @@ public class Main {
             // Backslash
             // -----------------------------------------
 
-            if (ch == '\\' && !insideSingleQuotes) {
+            if (ch == '\\'
+                    && !insideSingleQuotes) {
 
                 if (i + 1 < command.length()) {
                     i++;
@@ -390,7 +459,8 @@ public class Main {
             // Single quote
             // -----------------------------------------
 
-            if (ch == '\'' && !insideDoubleQuotes) {
+            if (ch == '\''
+                    && !insideDoubleQuotes) {
 
                 insideSingleQuotes =
                         !insideSingleQuotes;
@@ -402,7 +472,8 @@ public class Main {
             // Double quote
             // -----------------------------------------
 
-            if (ch == '"' && !insideSingleQuotes) {
+            if (ch == '"'
+                    && !insideSingleQuotes) {
 
                 insideDoubleQuotes =
                         !insideDoubleQuotes;
@@ -411,7 +482,7 @@ public class Main {
             }
 
             // -----------------------------------------
-            // Redirection operator
+            // Redirection
             // -----------------------------------------
 
             if (ch == '>'
@@ -421,7 +492,10 @@ public class Main {
                 String commandPart;
                 String filePart;
 
+                // -------------------------------------
                 // 2>
+                // -------------------------------------
+
                 if (i > 0 &&
                         command.charAt(i - 1) == '2') {
 
@@ -443,7 +517,10 @@ public class Main {
                     };
                 }
 
+                // -------------------------------------
                 // 1>
+                // -------------------------------------
+
                 if (i > 0 &&
                         command.charAt(i - 1) == '1') {
 
@@ -465,7 +542,10 @@ public class Main {
                     };
                 }
 
+                // -------------------------------------
                 // >
+                // -------------------------------------
+
                 commandPart =
                         command.substring(
                                 0,
@@ -536,7 +616,6 @@ public class Main {
 
             // -----------------------------------------
             // Backslash inside double quotes
-            // Only escapes " and \
             // -----------------------------------------
 
             else if (ch == '\\'
@@ -547,8 +626,8 @@ public class Main {
                     char next =
                             command.charAt(i + 1);
 
-                    if (next == '"' ||
-                            next == '\\') {
+                    if (next == '"'
+                            || next == '\\') {
 
                         i++;
 
@@ -584,7 +663,7 @@ public class Main {
             }
 
             // -----------------------------------------
-            // Whitespace outside quotes
+            // Whitespace
             // -----------------------------------------
 
             else if (Character.isWhitespace(ch)
@@ -625,7 +704,7 @@ public class Main {
 
 
     // =====================================================
-    // type command
+    // type
     // =====================================================
 
     public static String type(
