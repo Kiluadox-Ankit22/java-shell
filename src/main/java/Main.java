@@ -23,16 +23,19 @@ public class Main {
             }
 
             // -----------------------------------------
-            // Parse output redirection
+            // Parse redirection
             // Supports:
             // >
             // 1>
+            // 2>
             // -----------------------------------------
 
-            String[] redirectParts = parseRedirection(command);
+            String[] redirectParts =
+                    parseRedirection(command);
 
             String commandPart = redirectParts[0];
             String outputFile = redirectParts[1];
+            String errorFile = redirectParts[2];
 
             // -----------------------------------------
             // cd
@@ -67,12 +70,31 @@ public class Main {
 
                 } else {
 
-                    System.out.println(
-                            "cd: " + target +
-                            ": No such file or directory"
-                    );
-                }
+                    if (errorFile != null) {
 
+                        File file =
+                                getOutputFile(
+                                        currentDirectory,
+                                        errorFile
+                                );
+
+                        try (PrintStream err =
+                                     new PrintStream(file)) {
+
+                            err.println(
+                                    "cd: " + target +
+                                    ": No such file or directory"
+                            );
+                        }
+
+                    } else {
+
+                        System.err.println(
+                                "cd: " + target +
+                                ": No such file or directory"
+                        );
+                    }
+                }
             }
 
             // -----------------------------------------
@@ -217,6 +239,10 @@ public class Main {
                             currentDirectory
                     );
 
+                    // ---------------------------------
+                    // stdout
+                    // ---------------------------------
+
                     if (outputFile != null) {
 
                         File file =
@@ -225,20 +251,38 @@ public class Main {
                                         outputFile
                                 );
 
-                        // stdout -> file
                         processBuilder.redirectOutput(
                                 ProcessBuilder.Redirect.to(file)
                         );
 
-                        // stderr -> terminal
-                        processBuilder.redirectError(
+                    } else {
+
+                        processBuilder.redirectOutput(
                                 ProcessBuilder.Redirect.INHERIT
+                        );
+                    }
+
+                    // ---------------------------------
+                    // stderr
+                    // ---------------------------------
+
+                    if (errorFile != null) {
+
+                        File file =
+                                getOutputFile(
+                                        currentDirectory,
+                                        errorFile
+                                );
+
+                        processBuilder.redirectError(
+                                ProcessBuilder.Redirect.to(file)
                         );
 
                     } else {
 
-                        // stdout + stderr -> terminal
-                        processBuilder.inheritIO();
+                        processBuilder.redirectError(
+                                ProcessBuilder.Redirect.INHERIT
+                        );
                     }
 
                     Process process =
@@ -248,10 +292,31 @@ public class Main {
 
                 } else {
 
-                    System.out.println(
-                            programName +
-                            ": command not found"
-                    );
+                    // command not found is stderr
+                    if (errorFile != null) {
+
+                        File file =
+                                getOutputFile(
+                                        currentDirectory,
+                                        errorFile
+                                );
+
+                        try (PrintStream err =
+                                     new PrintStream(file)) {
+
+                            err.println(
+                                    programName +
+                                    ": command not found"
+                            );
+                        }
+
+                    } else {
+
+                        System.err.println(
+                                programName +
+                                ": command not found"
+                        );
+                    }
                 }
             }
         }
@@ -261,15 +326,15 @@ public class Main {
 
 
     // =====================================================
-    // Get output file
+    // Get output/error file
     // =====================================================
 
     public static File getOutputFile(
             File currentDirectory,
             String outputFile) {
 
-        // Remove quotes from filename
-        String[] parts = tokenize(outputFile);
+        String[] parts =
+                tokenize(outputFile);
 
         if (parts.length == 0) {
             return new File(currentDirectory, outputFile);
@@ -277,9 +342,7 @@ public class Main {
 
         String path = parts[0];
 
-        // IMPORTANT:
-        // Absolute path must NOT be combined
-        // with currentDirectory.
+        // Absolute path
         if (path.startsWith("/")) {
             return new File(path);
         }
@@ -290,20 +353,28 @@ public class Main {
 
 
     // =====================================================
-    // Parse > and 1>
+    // Parse redirection
+    //
+    // Supports:
+    // >
+    // 1>
+    // 2>
     // =====================================================
 
-    public static String[] parseRedirection(String command) {
+    public static String[] parseRedirection(
+            String command) {
 
         boolean insideSingleQuotes = false;
         boolean insideDoubleQuotes = false;
 
-        for (int i = 0; i < command.length(); i++) {
+        for (int i = 0;
+             i < command.length();
+             i++) {
 
             char ch = command.charAt(i);
 
             // -----------------------------------------
-            // Handle backslash outside single quotes
+            // Backslash
             // -----------------------------------------
 
             if (ch == '\\' && !insideSingleQuotes) {
@@ -340,35 +411,76 @@ public class Main {
             }
 
             // -----------------------------------------
-            // Find >
-            // Only outside quotes
+            // Redirection operator
             // -----------------------------------------
 
             if (ch == '>'
                     && !insideSingleQuotes
                     && !insideDoubleQuotes) {
 
-                int redirectStart = i;
+                String commandPart;
+                String filePart;
 
-                // Check for 1>
+                // 2>
                 if (i > 0 &&
-                    command.charAt(i - 1) == '1') {
+                        command.charAt(i - 1) == '2') {
 
-                    redirectStart = i - 1;
+                    commandPart =
+                            command.substring(
+                                    0,
+                                    i - 1
+                            ).trim();
+
+                    filePart =
+                            command.substring(
+                                    i + 1
+                            ).trim();
+
+                    return new String[] {
+                            commandPart,
+                            null,
+                            filePart
+                    };
                 }
 
-                String commandPart =
+                // 1>
+                if (i > 0 &&
+                        command.charAt(i - 1) == '1') {
+
+                    commandPart =
+                            command.substring(
+                                    0,
+                                    i - 1
+                            ).trim();
+
+                    filePart =
+                            command.substring(
+                                    i + 1
+                            ).trim();
+
+                    return new String[] {
+                            commandPart,
+                            filePart,
+                            null
+                    };
+                }
+
+                // >
+                commandPart =
                         command.substring(
                                 0,
-                                redirectStart
+                                i
                         ).trim();
 
-                String outputFile =
-                        command.substring(i + 1).trim();
+                filePart =
+                        command.substring(
+                                i + 1
+                        ).trim();
 
                 return new String[] {
                         commandPart,
-                        outputFile
+                        filePart,
+                        null
                 };
             }
         }
@@ -376,6 +488,7 @@ public class Main {
         // No redirection
         return new String[] {
                 command,
+                null,
                 null
         };
     }
@@ -385,7 +498,8 @@ public class Main {
     // Tokenizer
     // =====================================================
 
-    public static String[] tokenize(String command) {
+    public static String[] tokenize(
+            String command) {
 
         List<String> arguments =
                 new ArrayList<>();
@@ -418,7 +532,6 @@ public class Main {
                             command.charAt(i)
                     );
                 }
-
             }
 
             // -----------------------------------------
@@ -435,7 +548,7 @@ public class Main {
                             command.charAt(i + 1);
 
                     if (next == '"' ||
-                        next == '\\') {
+                            next == '\\') {
 
                         i++;
 
@@ -443,7 +556,6 @@ public class Main {
 
                     } else {
 
-                        // Backslash stays literal
                         current.append('\\');
                     }
                 }
@@ -516,7 +628,8 @@ public class Main {
     // type command
     // =====================================================
 
-    public static String type(String command) {
+    public static String type(
+            String command) {
 
         String[] commands = {
                 "exit",
@@ -532,7 +645,7 @@ public class Main {
         String[] pathDirs =
                 path.split(":");
 
-        // Check shell builtins
+        // Builtins
         for (int i = 0;
              i < commands.length;
              i++) {
@@ -544,7 +657,7 @@ public class Main {
             }
         }
 
-        // Check PATH
+        // PATH
         for (int i = 0;
              i < pathDirs.length;
              i++) {
